@@ -9,6 +9,7 @@ public class UIManager : MonoBehaviour {
 
 	//TODO: temporary
 	public TMP_Text tanksText;
+	public TMP_Text playerJoinText;
 
 	private void Awake() {
 		instance = this;

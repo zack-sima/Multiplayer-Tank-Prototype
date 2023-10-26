@@ -3,7 +3,10 @@
 --- !u!78 &1
 TagManager:
   serializedVersion: 2
-  tags: []
+  tags:
+  - Front Armor
+  - Rear Armor
+  - Side Armor
   layers:
   - Default
   - TransparentFX
@@ -12,9 +15,9 @@ TagManager:
   - Water
   - UI
   - 
-  - 
-  - 
-  - 
+  - Tank Armor
+  - Tank Collider
+  - Projectiles
   - 
   - 
   - 

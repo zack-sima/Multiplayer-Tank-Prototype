@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -11,6 +12,9 @@ public class NetworkingController : NetworkManager {
 	public static NetworkingController instance;
 
 	[SerializeField]
+	private GameObject serverSyncerPrefab;
+
+	[SerializeField]
 	private GameObject t34Prefab, panzer4Prefab;
 
 	//NOTE: both server and clients use this but separately (client self-populates this list)
@@ -19,11 +23,27 @@ public class NetworkingController : NetworkManager {
 	public Dictionary<uint, TankController> GetTanks() {
 		return tanks;
 	}
+
+	//both server and clients use
 	public void AddTank(TankController t) {
 		tanks.Add(t.netId, t);
 	}
 	public void RemoveTank(uint tankId) {
 		tanks.Remove(tankId);
+	}
+
+	//TODO: temporary tank positions display
+	[Server]
+	public void UpdateTankString() {
+		Dictionary<bool, string> p = new() { { true, "open" }, { false, "closed" } };
+		string s = "";
+		int count = 1;
+		foreach (TankController t in tanks.Values.OrderBy(t => t.netId)) {
+			s += $"Tank {count}: driver(1) [{p[t.availableOccupations[0]]}], gunner(2) [{p[t.availableOccupations[1]]}]\n";
+			count++;
+		}
+
+		ServerSyncer.instance.clientTanks = s;
 	}
 
 	public override void Awake() {
@@ -102,6 +122,7 @@ public class NetworkingController : NetworkManager {
 
 	//called on server when client disconnects
 	public override void OnServerDisconnect(NetworkConnectionToClient conn) {
+		conn.identity.GetComponent<Player>().PlayerLeftGame();
 		base.OnServerDisconnect(conn);
 	}
 
@@ -132,12 +153,17 @@ public class NetworkingController : NetworkManager {
 	public override void OnStartHost() { }
 
 	public override void OnStartServer() {
+		//spawn server syncer (**MUST SPAWN**)
+		NetworkServer.Spawn(Instantiate(serverSyncerPrefab));
+
 		//spawn tanks (right now just two tanks)
 		GameObject insItem = Instantiate(t34Prefab, new Vector3(-3.5f, 0, -3), Quaternion.Euler(0, 90, 0));
 		NetworkServer.Spawn(insItem);
 
 		GameObject insItem2 = Instantiate(panzer4Prefab, new Vector3(-3.5f, 0, -8), Quaternion.Euler(0, 90, 0));
 		NetworkServer.Spawn(insItem2);
+
+		UpdateTankString();
 	}
 
 	public override void OnStartClient() { }
