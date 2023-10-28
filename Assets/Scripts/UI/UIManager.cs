@@ -7,6 +7,9 @@ using TMPro;
 public class UIManager : MonoBehaviour {
 	public static UIManager instance;
 
+	public Camera mainCamera;
+	public Image gunnerSights, driverSights;
+
 	//TODO: temporary
 	public TMP_Text tanksText;
 	public TMP_Text playerJoinText;

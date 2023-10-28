@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using Mirror;
+using kcp2k;
 
 /* Documentation: https://mirror-networking.gitbook.io/docs/components/network-manager
 	API Reference: https://mirror-networking.com/docs/api/Mirror.NetworkManager.html */
@@ -50,12 +51,16 @@ public class NetworkingController : NetworkManager {
 		base.Awake();
 		instance = this;
 	}
-
-	#region Unity Callbacks
-
 	public override void Start() {
 		base.Start();
+		//#if UNITY_STANDALONE_LINUX && !UNITY_EDITOR //linux server
+		//		GetComponent<KcpTransport>().Port = 7777;
+		//		print("started linux server");
+		//		StartServer();
+		//#endif
 	}
+
+	#region Unity Callbacks
 
 	public override void LateUpdate() {
 		base.LateUpdate();

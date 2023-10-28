@@ -43,7 +43,7 @@ public class Player : NetworkBehaviour {
 		if (selectedTank != null) selectedTank.VacatePosition(tankPosition);
 	}
 
-	[Client]
+	[Client] //local player
 	private void ChooseTank(TankOccupation occupation) {
 		List<TankController> tanks = new(NetworkingController.instance.GetTanks().Values);
 		tanks.OrderBy(t => t.netId);
@@ -51,9 +51,11 @@ public class Player : NetworkBehaviour {
 
 		//if hovering tank has position, join
 		if (t.availableOccupations[(int)occupation]) {
+			UIManager.instance.mainCamera.gameObject.SetActive(false);
 
 			//vacate existing position
 			if (selectedTank != null) {
+				selectedTank.DisableCameras();
 				CmdVacateTank();
 			}
 
@@ -62,6 +64,16 @@ public class Player : NetworkBehaviour {
 
 			tankPosition = occupation;
 			selectedTank = t;
+			selectedTank.EnableCamera(tankPosition);
+
+			UIManager.instance.driverSights.enabled = false;
+			UIManager.instance.gunnerSights.enabled = false;
+
+			if (tankPosition == TankOccupation.Driver) {
+				UIManager.instance.driverSights.enabled = true;
+			} else if (tankPosition == TankOccupation.Gunner) {
+				UIManager.instance.gunnerSights.enabled = true;
+			}
 		}
 	}
 	[Command]
@@ -80,7 +92,8 @@ public class Player : NetworkBehaviour {
 
 	//if velocity is the same, don't call command function
 	private Vector3 currentVelocity = Vector3.zero;
-	private float currentRotation = 0, deltaTurretRotation = 0;
+	private Vector2 currentTurretRotation = Vector2.zero;
+	private float currentRotation = 0;
 
 	[Command]
 	private void CmdSetTankVelocity(Vector3 newVelocity) {
@@ -91,7 +104,7 @@ public class Player : NetworkBehaviour {
 		selectedTank.SetTankRotation(newRotation);
 	}
 	[Command]
-	private void CmdSetTargetTurretRotation(float newRotation) {
+	private void CmdSetTargetTurretRotation(Vector2 newRotation) {
 		selectedTank.SetTargetTurretRotation(newRotation);
 	}
 	[Command]
@@ -128,19 +141,36 @@ public class Player : NetworkBehaviour {
 				currentRotation = newRotation;
 			}
 		} else if (tankPosition == TankOccupation.Gunner) {
-			//aim turret towards mouse position
-			Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
-			if (Physics.Raycast(ray, out RaycastHit hit)) {
-				Vector3 direction = hit.point - selectedTank.transform.position;
-
-				float angle = Mathf.Atan2(direction.x, direction.z) * Mathf.Rad2Deg;
-
-				//change turret rotation on server side
-				if (Mathf.Abs(angle - deltaTurretRotation) > 0.01f) {
-					CmdSetTargetTurretRotation(angle);
-					deltaTurretRotation = angle;
-				}
+			Vector2 newTurretRotation = Vector2.zero;
+			if (Input.GetKey(KeyCode.W)) {
+				newTurretRotation += new Vector2(0, -1);
 			}
+			if (Input.GetKey(KeyCode.S)) {
+				newTurretRotation += new Vector2(0, 1);
+			}
+			if (Input.GetKey(KeyCode.A)) {
+				newTurretRotation += new Vector2(-1, 0);
+			}
+			if (Input.GetKey(KeyCode.D)) {
+				newTurretRotation += new Vector2(1, 0);
+			}
+			if (newTurretRotation != currentTurretRotation) {
+				CmdSetTargetTurretRotation(newTurretRotation);
+				currentTurretRotation = newTurretRotation;
+			}
+			//aim turret towards mouse position
+			//Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
+			//if (Physics.Raycast(ray, out RaycastHit hit)) {
+			//	Vector3 direction = hit.point - selectedTank.transform.position;
+
+			//	float angle = Mathf.Atan2(direction.x, direction.z) * Mathf.Rad2Deg;
+
+			//	//change turret rotation on server side
+			//	if (Mathf.Abs(angle - deltaTurretRotation) > 0.01f) {
+			//		CmdSetTargetTurretRotation(angle);
+			//		deltaTurretRotation = angle;
+			//	}
+			//}
 			if (Input.GetMouseButtonDown(0)) {
 				CmdShootBullet();
 			}

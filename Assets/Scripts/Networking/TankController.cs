@@ -6,15 +6,17 @@ using Mirror;
 // NOTE: Do not put objects in DontDestroyOnLoad (DDOL) in Awake. You can do that in Start instead.
 // NOTE: Start and stop authority will not be used
 
-[RequireComponent(typeof(Rigidbody)), RequireComponent(typeof(NetworkTransform))]
+[RequireComponent(typeof(Rigidbody))]
 public class TankController : NetworkBehaviour {
 	[SyncVar]
 	private float wheelVelocity; //animate wheels on client side when moving
 
 	[SerializeField]
+	private Camera gunnerCamera, driverCamera;
+	[SerializeField]
 	private GameObject bulletPrefab;
 	[SerializeField]
-	private Transform turret, barrel, shootAnchor;
+	private Transform turret, turretTop, barrel, shootAnchor;
 	[SerializeField]
 	private List<Transform> wheels;
 
@@ -23,6 +25,9 @@ public class TankController : NetworkBehaviour {
 
 	private Vector3 originalBarrelPosition;
 	private float barrelBackAmount = 0f; //client animation
+
+	private float turretXRotation = 0f; //track rotation to bound between angles
+	private const float maxTurretRotation = 15f;
 
 	private Rigidbody rb;
 
@@ -62,7 +67,7 @@ public class TankController : NetworkBehaviour {
 	#endregion
 
 	//server variables
-	private float targetTurretRotation = 0;
+	private Vector2 targetTurretRotation = Vector2.zero;
 
 	private float targetTankRotationChange = 0;
 	private float currentTankRotationChange = 0; //accelerate when rotating
@@ -98,6 +103,21 @@ public class TankController : NetworkBehaviour {
 		}
 	}
 
+	//for local players controlling tank
+	[Client]
+	public void DisableCameras() {
+		driverCamera.gameObject.SetActive(false);
+		gunnerCamera.gameObject.SetActive(false);
+	}
+	[Client]
+	public void EnableCamera(TankOccupation p) {
+		if (p == TankOccupation.Driver) {
+			driverCamera.gameObject.SetActive(true);
+		} else if (p == TankOccupation.Gunner) {
+			gunnerCamera.gameObject.SetActive(true);
+		}
+	}
+
 	[Server]
 	private void ServerMovements() {
 		//interpolate tank acceleration, faster acceleration than de-acceleration
@@ -119,8 +139,15 @@ public class TankController : NetworkBehaviour {
 
 		//rotate towards target rotation (if occupied)
 		if (!availableOccupations[(int)TankOccupation.Gunner]) {
-			turret.rotation = Quaternion.RotateTowards(turret.rotation, Quaternion.Euler(0, targetTurretRotation, 0),
-				turretRotationSpeed * Time.deltaTime);
+			turret.Rotate(0, targetTurretRotation.x * Time.deltaTime * turretRotationSpeed, 0);
+
+			turretXRotation = Mathf.Clamp(turretXRotation + targetTurretRotation.y * Time.deltaTime * turretRotationSpeed,
+				-maxTurretRotation, maxTurretRotation);
+
+			turretTop.localEulerAngles = new Vector3(turretXRotation, 0, 0);
+
+			//turret.rotation = Quaternion.RotateTowards(turret.rotation, Quaternion.Euler(0, targetTurretRotation, 0),
+			//	turretRotationSpeed * Time.deltaTime);
 		}
 
 		//if driver is vacant reset movement
@@ -166,7 +193,7 @@ public class TankController : NetworkBehaviour {
 		NetworkServer.Spawn(bullet);
 
 		if (hitCoroutine != null) StopCoroutine(hitCoroutine);
-		hitCoroutine = StartCoroutine(GradualForceAtPoint(shootAnchor.position, 700f));
+		hitCoroutine = StartCoroutine(GradualForceAtPoint(shootAnchor.position, 550f));
 
 		RpcShootBullet();
 	}
@@ -177,7 +204,7 @@ public class TankController : NetworkBehaviour {
 	}
 	private IEnumerator AddBarrelRecoil() {
 		for (float i = 0f; i < 0.05f; i += Time.deltaTime) {
-			barrelBackAmount = Mathf.Min(barrelBackAmount + Time.deltaTime * 10f, 0.5f);
+			barrelBackAmount = Mathf.Min(barrelBackAmount + Time.deltaTime * 7.5f, 0.35f);
 			yield return null;
 		}
 	}
@@ -191,8 +218,8 @@ public class TankController : NetworkBehaviour {
 		targetTankRotationChange = direction;
 	}
 	[Server] //only y rotation; might use target position instead and calculate on server
-	public void SetTargetTurretRotation(float yRotation) {
-		targetTurretRotation = yRotation;
+	public void SetTargetTurretRotation(Vector2 rotation) {
+		targetTurretRotation = rotation;
 	}
 }
 [System.Serializable]
