@@ -13,8 +13,9 @@ public class NetworkingController : NetworkManager {
 	public static NetworkingController instance;
 
 	[SerializeField]
+	private GameObject spawnpointParent;
+	[SerializeField]
 	private GameObject serverSyncerPrefab;
-
 	[SerializeField]
 	private GameObject t34Prefab, panzer4Prefab;
 
@@ -31,6 +32,33 @@ public class NetworkingController : NetworkManager {
 	}
 	public void RemoveTank(uint tankId) {
 		tanks.Remove(tankId);
+	}
+
+	[Server] //find spawnpoint furthest away from enemies; TODO: add teams
+	public Vector3 FindSpawnpoint(bool random) {
+		if (random) {
+			return spawnpointParent.transform.GetChild(UnityEngine.Random.Range(
+				0, spawnpointParent.transform.childCount)).position;
+		}
+		Transform furthestSpawnpoint = spawnpointParent.transform.GetChild(0);
+		float furthestDistance = 0;
+
+		foreach (Transform sp in spawnpointParent.GetComponentsInChildren<Transform>()) {
+			if (sp == spawnpointParent) continue;
+
+			float closestDistance = 10000;
+			foreach (TankController tc in tanks.Values) {
+				if (tc != null) {
+					float distance = Vector3.Distance(tc.transform.position, sp.position);
+					if (closestDistance > distance) closestDistance = distance;
+				}
+			}
+			if (closestDistance > furthestDistance) {
+				furthestDistance = closestDistance;
+				furthestSpawnpoint = sp;
+			}
+		}
+		return furthestSpawnpoint.position;
 	}
 
 	//TODO: temporary tank positions display
@@ -53,11 +81,11 @@ public class NetworkingController : NetworkManager {
 	}
 	public override void Start() {
 		base.Start();
-		//#if UNITY_STANDALONE_LINUX && !UNITY_EDITOR //linux server
-		//		GetComponent<KcpTransport>().Port = 7777;
-		//		print("started linux server");
-		//		StartServer();
-		//#endif
+#if UNITY_STANDALONE_LINUX && !UNITY_EDITOR //linux server
+				GetComponent<KcpTransport>().Port = 7777;
+				print("started linux server");
+				StartServer();
+#endif
 	}
 
 	#region Unity Callbacks
@@ -177,7 +205,11 @@ public class NetworkingController : NetworkManager {
 
 	public override void OnStopServer() { }
 
-	public override void OnStopClient() { }
+	public override void OnStopClient() {
+		UIManager.instance.mainCamera.gameObject.SetActive(true);
+		UIManager.instance.gunnerSights.enabled = false;
+		UIManager.instance.driverSights.enabled = false;
+	}
 
 	#endregion
 }

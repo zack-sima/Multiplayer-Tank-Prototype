@@ -17,4 +17,8 @@ public class UIManager : MonoBehaviour {
 	private void Awake() {
 		instance = this;
 	}
+	public void DisableSights() {
+		driverSights.enabled = false;
+		gunnerSights.enabled = false;
+	}
 }

@@ -10,11 +10,24 @@ using Mirror;
 public class TankController : NetworkBehaviour {
 	[SyncVar]
 	private float wheelVelocity; //animate wheels on client side when moving
+	[SyncVar]
+	private int tankAmmo, machineGunAmmo; //infinite, just the ones in magazine
+	[SyncVar]
+	public float health;
 
+	private const float maxHealth = 1000; //TODO: set custom
+
+	//prefabs
+	[SerializeField]
+	private GameObject bulletPrefab, explosionPrefab; //death explosion
+
+	//tank parts
+	[SerializeField]
+	private Transform healthCanvas;
+	[SerializeField]
+	private RectTransform healthBar;
 	[SerializeField]
 	private Camera gunnerCamera, driverCamera;
-	[SerializeField]
-	private GameObject bulletPrefab;
 	[SerializeField]
 	private Transform turret, turretTop, barrel, shootAnchor;
 	[SerializeField]
@@ -40,6 +53,10 @@ public class TankController : NetworkBehaviour {
 			occupiers.Add(null);
 		}
 		rb.centerOfMass += Vector3.down * 0.7f;
+		health = maxHealth;
+
+		transform.SetPositionAndRotation(NetworkingController.instance.FindSpawnpoint(false),
+			Quaternion.identity);
 	}
 
 	public override void OnStopServer() {
@@ -89,8 +106,29 @@ public class TankController : NetworkBehaviour {
 		}
 		if (isClient) {
 			ClientAnimations();
+
+			//don't display health bar if local
+			bool active = true;
+			foreach (Player p in occupiers) {
+				if (p != null && p.isLocalPlayer) {
+					active = false;
+					break;
+				}
+			}
+			if (active != healthCanvas.gameObject.activeInHierarchy) {
+				healthCanvas.gameObject.SetActive(active);
+			}
 		}
 	}
+	private void FixedUpdate() {
+		if (Camera.main != null) {
+			healthCanvas.rotation = Camera.main.transform.rotation;
+		}
+	}
+	public void UpdateHealth() {
+		healthBar.localScale = new Vector2(health / maxHealth, 1);
+	}
+
 	[Client]
 	private void ClientAnimations() {
 		if (barrelBackAmount > 0) {
@@ -157,22 +195,59 @@ public class TankController : NetworkBehaviour {
 		}
 
 		transform.Rotate(0, currentTankRotationChange * rotationSpeed * Time.deltaTime, 0);
-		rb.velocity = transform.TransformDirection(currentTankRealVelocity * tankSpeed);
+		Vector3 targetVelocity = transform.TransformDirection(currentTankRealVelocity * tankSpeed); ;
+
+		//keep gravity
+		rb.velocity = new Vector3(targetVelocity.x, rb.velocity.y, targetVelocity.z);
 	}
 	[Server]
 	public void TankHit(Vector3 impactPoint, TankController sender, float damage, bool shakeTank) {
-		if (shakeTank) {
-			if (hitCoroutine != null) StopCoroutine(hitCoroutine);
-			hitCoroutine = StartCoroutine(GradualForceAtPoint(impactPoint, 1000f));
+		health -= damage;
+		if (health <= 0) {
+			//TODO: blow up tank
+			RpcExplodeTank(transform.position + Vector3.up * 0.5f);
+			transform.SetPositionAndRotation(NetworkingController.instance.FindSpawnpoint(false),
+				Quaternion.identity);
+			turret.localRotation = Quaternion.identity;
+
+			Debug.Log($"tank_{netId} blown up by tank_{sender.netId}!");
+			health = maxHealth;
+
+			//exit crew
+			for (int i = 0; i < occupiers.Count; i++) {
+				if (occupiers[i] != null) {
+					occupiers[i].ForceVacateTank();
+				}
+			}
+			//don't shake tank if blowing up
+			shakeTank = false;
 		}
+		if (shakeTank) {
+			float force = 50f;
+			rb.AddExplosionForce(force * rb.mass, new Vector3(impactPoint.x,
+				transform.position.y - 1f, impactPoint.z), 5f);
+			//if (hitCoroutine != null) StopCoroutine(hitCoroutine);
+			//hitCoroutine = StartCoroutine(GradualForceAtPoint(impactPoint, 200f));
+		}
+		RpcTankHit();
 	}
-	private Coroutine hitCoroutine = null;
+	[ClientRpc]
+	public void RpcExplodeTank(Vector3 position) {
+		Destroy(Instantiate(explosionPrefab, position, Quaternion.identity), 7f);
+	}
+	[ClientRpc]
+	public void RpcTankHit() {
+		Invoke(nameof(UpdateHealth), 0.05f);
+	}
+
+	//private Coroutine hitCoroutine = null;
 	private IEnumerator GradualForceAtPoint(Vector3 impactPoint, float force) {
 		for (float i = 0; i < 0.2f; i += Time.deltaTime) {
 			rb.AddExplosionForce(force * rb.mass * Time.deltaTime, new Vector3(impactPoint.x,
 				transform.position.y - 1f, impactPoint.z), 5f);
 			yield return null;
 		}
+		yield return null;
 	}
 	[Server]
 	public void OccupyPosition(TankOccupation occupation, Player player) {
@@ -192,8 +267,13 @@ public class TankController : NetworkBehaviour {
 		bullet.GetComponent<TankProjectile>().sender = this;
 		NetworkServer.Spawn(bullet);
 
-		if (hitCoroutine != null) StopCoroutine(hitCoroutine);
-		hitCoroutine = StartCoroutine(GradualForceAtPoint(shootAnchor.position, 550f));
+		float force = 25f;
+		Vector3 impactPoint = shootAnchor.position;
+		rb.AddExplosionForce(force * rb.mass, new Vector3(impactPoint.x,
+			transform.position.y - 1f, impactPoint.z), 5f);
+
+		//if (hitCoroutine != null) StopCoroutine(hitCoroutine);
+		//hitCoroutine = StartCoroutine(GradualForceAtPoint(shootAnchor.position, 100f));
 
 		RpcShootBullet();
 	}

@@ -37,6 +37,7 @@ public class Player : NetworkBehaviour {
 		}
 	}
 
+
 	//** called by server when player left game **
 	[Server]
 	public void PlayerLeftGame() {
@@ -66,8 +67,7 @@ public class Player : NetworkBehaviour {
 			selectedTank = t;
 			selectedTank.EnableCamera(tankPosition);
 
-			UIManager.instance.driverSights.enabled = false;
-			UIManager.instance.gunnerSights.enabled = false;
+			UIManager.instance.DisableSights();
 
 			if (tankPosition == TankOccupation.Driver) {
 				UIManager.instance.driverSights.enabled = true;
@@ -80,6 +80,15 @@ public class Player : NetworkBehaviour {
 	private void CmdSetTank(TankController t, TankOccupation o) {
 		selectedTank = t;
 		tankPosition = o;
+	}
+	[Server] //called when tank is blown up
+	public void ForceVacateTank() {
+		UIManager.instance.mainCamera.gameObject.SetActive(true);
+		UIManager.instance.DisableSights();
+
+		selectedTank.DisableCameras();
+		selectedTank.VacatePosition(tankPosition);
+		selectedTank = null;
 	}
 	[Command]
 	private void CmdVacateTank() {
