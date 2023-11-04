@@ -11,11 +11,13 @@ public class TankController : NetworkBehaviour {
 	[SyncVar]
 	private float wheelVelocity; //animate wheels on client side when moving
 	[SyncVar]
-	private int tankAmmo, machineGunAmmo; //infinite, just the ones in magazine
+	public float displaySpeed; //client side displayed on speedometer
+	[SyncVar]
+	public int tankAmmo, machineGunAmmo; //infinite, just the ones in magazine
 	[SyncVar]
 	public float health;
 
-	private const float maxHealth = 1000; //TODO: set custom
+	public const float maxHealth = 1000; //TODO: set custom
 
 	//prefabs
 	[SerializeField]
@@ -54,6 +56,10 @@ public class TankController : NetworkBehaviour {
 		}
 		rb.centerOfMass += Vector3.down * 0.7f;
 		health = maxHealth;
+
+		//initialize ammo
+		tankAmmo = 1;
+		machineGunAmmo = 50;
 
 		transform.SetPositionAndRotation(NetworkingController.instance.FindSpawnpoint(false),
 			Quaternion.identity);
@@ -94,14 +100,30 @@ public class TankController : NetworkBehaviour {
 	//gradually interpolates towards target for acceleration
 	private Vector3 currentTankRealVelocity = Vector3.zero;
 
-	private float tankSpeed = 5, rotationSpeed = 35, turretRotationSpeed = 35; //TODO: set based on vehicle
+	//server only, for reloading tank
+	private float reloadCountdown = 0f;
+	private const float reloadSpeed = 3f;
+
+	private const float tankSpeed = 5, rotationSpeed = 35, turretRotationSpeed = 35; //TODO: set based on vehicle
 
 	private void Awake() {
 		rb = GetComponent<Rigidbody>();
 		originalBarrelPosition = barrel.localPosition;
 	}
+
+
 	private void Update() {
 		if (isServer) {
+			//reload ammo
+			if (reloadCountdown > 0) {
+				reloadCountdown -= Time.deltaTime;
+				if (reloadCountdown <= 0) {
+					tankAmmo = 1;
+				}
+			} else if (tankAmmo <= 0) {
+				reloadCountdown += reloadSpeed;
+			}
+
 			ServerMovements();
 		}
 		if (isClient) {
@@ -125,6 +147,12 @@ public class TankController : NetworkBehaviour {
 			healthCanvas.rotation = Camera.main.transform.rotation;
 		}
 	}
+
+	//getters
+	public Transform GetTurret() {
+		return turret;
+	}
+
 	public void UpdateHealth() {
 		healthBar.localScale = new Vector2(health / maxHealth, 1);
 	}
@@ -175,6 +203,9 @@ public class TankController : NetworkBehaviour {
 		//animate wheels
 		wheelVelocity = currentTankRealVelocity.z;
 
+		//change display speed
+		displaySpeed = currentTankRealVelocity.sqrMagnitude;
+
 		//rotate towards target rotation (if occupied)
 		if (!availableOccupations[(int)TankOccupation.Gunner]) {
 			turret.Rotate(0, targetTurretRotation.x * Time.deltaTime * turretRotationSpeed, 0);
@@ -183,9 +214,6 @@ public class TankController : NetworkBehaviour {
 				-maxTurretRotation, maxTurretRotation);
 
 			turretTop.localEulerAngles = new Vector3(turretXRotation, 0, 0);
-
-			//turret.rotation = Quaternion.RotateTowards(turret.rotation, Quaternion.Euler(0, targetTurretRotation, 0),
-			//	turretRotationSpeed * Time.deltaTime);
 		}
 
 		//if driver is vacant reset movement
@@ -226,8 +254,6 @@ public class TankController : NetworkBehaviour {
 			float force = 50f;
 			rb.AddExplosionForce(force * rb.mass, new Vector3(impactPoint.x,
 				transform.position.y - 1f, impactPoint.z), 5f);
-			//if (hitCoroutine != null) StopCoroutine(hitCoroutine);
-			//hitCoroutine = StartCoroutine(GradualForceAtPoint(impactPoint, 200f));
 		}
 		RpcTankHit();
 	}
@@ -240,15 +266,6 @@ public class TankController : NetworkBehaviour {
 		Invoke(nameof(UpdateHealth), 0.05f);
 	}
 
-	//private Coroutine hitCoroutine = null;
-	private IEnumerator GradualForceAtPoint(Vector3 impactPoint, float force) {
-		for (float i = 0; i < 0.2f; i += Time.deltaTime) {
-			rb.AddExplosionForce(force * rb.mass * Time.deltaTime, new Vector3(impactPoint.x,
-				transform.position.y - 1f, impactPoint.z), 5f);
-			yield return null;
-		}
-		yield return null;
-	}
 	[Server]
 	public void OccupyPosition(TankOccupation occupation, Player player) {
 		availableOccupations[(int)occupation] = false;
@@ -263,17 +280,18 @@ public class TankController : NetworkBehaviour {
 	}
 	[Server]
 	public void ShootBullet() {
+		if (tankAmmo <= 0) return;
+
+		tankAmmo--;
+
 		GameObject bullet = Instantiate(bulletPrefab, shootAnchor.position, shootAnchor.rotation);
 		bullet.GetComponent<TankProjectile>().sender = this;
 		NetworkServer.Spawn(bullet);
 
-		float force = 25f;
+		float force = 15f;
 		Vector3 impactPoint = shootAnchor.position;
 		rb.AddExplosionForce(force * rb.mass, new Vector3(impactPoint.x,
 			transform.position.y - 1f, impactPoint.z), 5f);
-
-		//if (hitCoroutine != null) StopCoroutine(hitCoroutine);
-		//hitCoroutine = StartCoroutine(GradualForceAtPoint(shootAnchor.position, 100f));
 
 		RpcShootBullet();
 	}

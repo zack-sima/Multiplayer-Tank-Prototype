@@ -33,10 +33,31 @@ public class Player : NetworkBehaviour {
 			}
 			if (selectedTank != null) {
 				Controls();
+				TankUI();
 			}
 		}
 	}
+	[Client]
+	private void TankUI() {
+		UIManager.instance.turretDisplay.rotation = Quaternion.Euler(0, 0,
+			-selectedTank.GetTurret().localEulerAngles.y);
+		UIManager.instance.healthText.text = $"HP:\n{(int)selectedTank.health}/{(int)TankController.maxHealth}";
 
+		if (tankPosition == TankOccupation.Driver) {
+			UIManager.instance.driverUI.gameObject.SetActive(true);
+			UIManager.instance.gunnerUI.gameObject.SetActive(false);
+
+			//in km/h
+			UIManager.instance.speedText.text =
+				(selectedTank.displaySpeed * 3.6f * 5f).ToString("0.0") + " km/h";
+		} else if (tankPosition == TankOccupation.Gunner) {
+			UIManager.instance.driverUI.gameObject.SetActive(false);
+			UIManager.instance.gunnerUI.gameObject.SetActive(true);
+
+			UIManager.instance.mainGunAmmoText.text = $"Main Gun: {selectedTank.tankAmmo}/∞";
+		}
+
+	}
 
 	//** called by server when player left game **
 	[Server]

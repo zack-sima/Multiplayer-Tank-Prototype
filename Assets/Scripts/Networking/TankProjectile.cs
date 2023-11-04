@@ -45,7 +45,7 @@ public class TankProjectile : NetworkBehaviour {
 		if (isServer) StartCoroutine(TimedDestruction());
 	}
 	private void Update() {
-		transform.Translate(Time.deltaTime * 25 * Vector3.forward);
+		transform.Translate(Time.deltaTime * 55 * Vector3.forward);
 	}
 	private IEnumerator TimedDestruction() {
 		yield return new WaitForSeconds(5);

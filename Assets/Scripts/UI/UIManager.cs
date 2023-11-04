@@ -10,6 +10,9 @@ public class UIManager : MonoBehaviour {
 	public Camera mainCamera;
 	public Image gunnerSights, driverSights;
 
+	public RectTransform gunnerUI, driverUI, turretDisplay;
+	public TMP_Text speedText, mainGunAmmoText, healthText;
+
 	//TODO: temporary
 	public TMP_Text tanksText;
 	public TMP_Text playerJoinText;
